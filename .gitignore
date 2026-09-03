@@ -12,6 +12,9 @@ env/
 .vscode/
 .idea/
 
-# Archivos generados temporalmente por la aplicación
-temp_*.png
+# Excluir absolutamente todos los archivos PNG del control de versiones
+*.png
 *.pdf
+
+#Archivos
+Progect_state.md
