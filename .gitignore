@@ -1,0 +1,17 @@
+# Caché y compilados de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Entornos virtuales
+venv/
+env/
+.env/
+
+# Archivos de configuración de IDEs
+.vscode/
+.idea/
+
+# Archivos generados temporalmente por la aplicación
+temp_*.png
+*.pdf
