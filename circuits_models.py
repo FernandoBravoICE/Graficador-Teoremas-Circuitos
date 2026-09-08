@@ -1,11 +1,29 @@
 #Ecuaciones predefinidas del estado transitorio: subamortiguado, críticamente amortiguado, sobreamortiguado
+# circuit_models.py
+
 import numpy as np
 
 class CircuitSimulator:
-    """Modelo analítico para la respuesta libre de un circuito RL de primer orden."""
+    """Modelos analíticos estrictos para respuestas de un circuito RL de primer orden."""
     
     @staticmethod
+    def get_tau(R_th, L):
+        return L / R_th if R_th > 0 else float('inf')
+
+    @staticmethod
     def rl_free_response(t, R_th, L, i0):
-        tau = L / R_th if R_th > 0 else float('inf')
-        i_t = i0 * np.exp(-t / tau)
+        tau = CircuitSimulator.get_tau(R_th, L)
+        i_t = i0 * np.exp(- (R_th / L) * t)
+        return i_t, tau
+
+    @staticmethod
+    def rl_forced_response(t, R_th, L, iN):
+        tau = CircuitSimulator.get_tau(R_th, L)
+        i_t = iN * (1 - np.exp(- (R_th / L) * t))
+        return i_t, tau
+
+    @staticmethod
+    def rl_total_response(t, R_th, L, i0, iN):
+        tau = CircuitSimulator.get_tau(R_th, L)
+        i_t = i0 * np.exp(- (R_th / L) * t) + iN * (1 - np.exp(- (R_th / L) * t))
         return i_t, tau
