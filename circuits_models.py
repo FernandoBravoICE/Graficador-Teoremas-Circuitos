@@ -52,3 +52,21 @@ class CircuitSimulator:
         if tau <= 0: return np.zeros_like(t), tau
         v_t = v0 * np.exp(-t / tau) + vTh * (1 - np.exp(-t / tau))
         return v_t, tau
+    
+    # ================= MODELOS RLC =================
+    @staticmethod
+    def rlc_series_critically_damped(t, R, L, C, i0, di0_dt):
+        """
+        Modelo analítico estricto para circuito RLC serie críticamente amortiguado.
+        Implementa: i(t) = i(0)e^(-αt) + (di(0)/dt + α*i(0)) * t * e^(-αt)
+        """
+        if L <= 0 or C <= 0: return np.zeros_like(t), 0
+        alpha = R / (2 * L)
+        
+        # Evaluación vectorial de la respuesta transitoria
+        term1 = i0 * np.exp(-alpha * t)
+        term2 = (di0_dt + alpha * i0) * t * np.exp(-alpha * t)
+        i_t = term1 + term2
+        
+        tau_eq = 1 / alpha if alpha > 0 else float('inf')
+        return i_t, tau_eq

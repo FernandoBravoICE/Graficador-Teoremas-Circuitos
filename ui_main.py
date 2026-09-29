@@ -32,12 +32,12 @@ class TransientSimulatorUI(QMainWindow):
         left_layout.addWidget(self.title_label)
 
         self.combo_type = QComboBox()
-        self.combo_type.addItems(["Circuito RL", "Circuito RC"])
+        self.combo_type.addItems(["Circuito RL", "Circuito RC", "Circuito RLC Serie"])
         self.combo_type.setStyleSheet("font-size: 13px; font-weight: bold;")
-        self.combo_type.currentIndexChanged.connect(self.update_param_visibility)
+        #self.combo_type.currentIndexChanged.connect(self.update_param_visibility)
         left_layout.addWidget(self.combo_type)
-
-        group_topo = QGroupBox("Comportamientos Simultáneos")
+        
+        self.group_topo = QGroupBox("Comportamientos Simultáneos")
         layout_topo = QVBoxLayout()
         
         self.chk_free = QCheckBox("Respuesta Libre")
@@ -59,7 +59,7 @@ class TransientSimulatorUI(QMainWindow):
         self.chk_taus = QCheckBox("Activar marcadores de τ (1τ - 5τ)")
         self.chk_taus.setChecked(True)
         layout_topo.addWidget(self.chk_taus)
-        group_topo.setLayout(layout_topo)
+        self.group_topo.setLayout(layout_topo)
 
         self.group_params = QGroupBox("Parámetros del Sistema")
         self.layout_params = QFormLayout()
@@ -85,6 +85,11 @@ class TransientSimulatorUI(QMainWindow):
         self.row_v0_label = QLabel("Voltaje Inicial V_c(0) [V]:")
         self.layout_params.addRow(self.row_v0_label, self.input_v0)
 
+        
+        self.input_di0 = QLineEdit()
+        self.row_di0_label = QLabel("Derivada Inicial di(0)/dt [A/s]:")
+        self.layout_params.addRow(self.row_di0_label, self.input_di0)
+        
         # Excitación
         self.input_Vth = QLineEdit()
         self.row_Vth_label = QLabel("Voltaje Thévenin V_th [V]:")
@@ -114,17 +119,20 @@ class TransientSimulatorUI(QMainWindow):
         self.btn_export.setStyleSheet("background-color: #1e4620; color: white; font-weight: bold; border: 1px solid #122b14;")
         self.btn_export.clicked.connect(self.export_plot)
 
-        left_layout.addWidget(group_topo)
+        left_layout.addWidget(self.group_topo)
         left_layout.addWidget(self.group_params)
         left_layout.addWidget(group_info)
         left_layout.addStretch() 
         left_layout.addWidget(self.btn_simulate)
         left_layout.addWidget(self.btn_export)
-
+        
+        
         self.canvas = PlotCanvas(self, width=8, height=6, dpi=110)
         main_layout.addWidget(left_panel)
         main_layout.addWidget(self.canvas)
-
+        
+        self.combo_type.currentIndexChanged.connect(self.update_param_visibility)
+        
         self.update_param_visibility()
 
     def toggle_norton_inputs(self):
@@ -136,45 +144,95 @@ class TransientSimulatorUI(QMainWindow):
             has_text = bool(self.input_iN.text().strip())
             self.input_Vth.setEnabled(not has_text)
 
-    def set_ideal_parameters(self, is_rl):
+    def set_ideal_parameters(self, current_topo):
         self.input_Vth.setText("10.0")
         self.input_iN.setText("")
-        if is_rl:
+        if current_topo == "Circuito RL":
             self.input_Rth.setText("50")       
             self.input_L.setText("0.1")        
             self.input_tmax.setText("0.01")    
             self.input_i0.setText("0.05")      
-        else:
+        elif current_topo == "Circuito RC":
             self.input_Rth.setText("1000")     
             self.input_C.setText("0.00001")    
             self.input_tmax.setText("0.05")    
             self.input_v0.setText("2.0")       
-
+        elif current_topo == "Circuito RLC Serie":
+            # Parámetros para forzar amortiguamiento crítico (R = 2*sqrt(L/C))
+            self.input_Rth.setText("2")     
+            self.input_L.setText("1")    
+            self.input_C.setText("1")    
+            self.input_tmax.setText("10")    
+            self.input_i0.setText("0")
+            self.input_di0.setText("5")
+    
     def update_param_visibility(self):
         current_topo = self.combo_type.currentText()
         is_rl = current_topo == "Circuito RL"
+        is_rc = current_topo == "Circuito RC"
+        is_rlc = current_topo == "Circuito RLC Serie"
         
-        self.row_L_label.setVisible(is_rl)
-        self.input_L.setVisible(is_rl)
-        self.row_C_label.setVisible(not is_rl)
-        self.input_C.setVisible(not is_rl)
+        # 1. Mutación Dinámica de los Checkboxes
+        if is_rlc:
+            self.group_topo.setTitle("Tipos de Amortiguamiento")
+            self.chk_free.setText("Sobreamortiguado (Próximamente)")
+            self.chk_forced.setText("Críticamente Amortiguado")
+            self.chk_total.setText("Subamortiguado (Próximamente)")
+            
+            # Bloquear señales para evitar bucles recursivos en UI
+            self.chk_free.blockSignals(True)
+            self.chk_total.blockSignals(True)
+            
+            self.chk_free.setChecked(False)
+            self.chk_free.setEnabled(False)
+            
+            self.chk_total.setChecked(False)
+            self.chk_total.setEnabled(False)
+            
+            self.chk_forced.setChecked(True) # Activamos Críticamente Amortiguado por defecto
+            self.chk_forced.setEnabled(True)
+            
+            self.chk_free.blockSignals(False)
+            self.chk_total.blockSignals(False)
+            
+            needs_init = self.chk_forced.isChecked()
+            needs_excit = False # RLC actual no tiene fuente externa en t>0
+        else:
+            self.group_topo.setTitle("Comportamientos Simultáneos")
+            self.chk_free.setText("Respuesta Libre")
+            self.chk_forced.setText("Respuesta Forzada")
+            self.chk_total.setText("Respuesta Total")
+            
+            self.chk_free.setEnabled(True)
+            self.chk_total.setEnabled(True)
+            
+            needs_init = self.chk_free.isChecked() or self.chk_total.isChecked()
+            needs_excit = self.chk_forced.isChecked() or self.chk_total.isChecked()
 
-        needs_init = self.chk_free.isChecked() or self.chk_total.isChecked()
-        self.row_i0_label.setVisible(needs_init and is_rl)
-        self.input_i0.setVisible(needs_init and is_rl)
-        self.row_v0_label.setVisible(needs_init and not is_rl)
-        self.input_v0.setVisible(needs_init and not is_rl)
+        # 2. Gestión de Visibilidad de Parámetros
+        self.row_L_label.setVisible(is_rl or is_rlc)
+        self.input_L.setVisible(is_rl or is_rlc)
+        self.row_C_label.setVisible(is_rc or is_rlc)
+        self.input_C.setVisible(is_rc or is_rlc)
 
-        needs_excit = self.chk_forced.isChecked() or self.chk_total.isChecked()
-        self.row_Vth_label.setVisible(needs_excit)
-        self.input_Vth.setVisible(needs_excit)
-        self.row_iN_label.setVisible(needs_excit)
-        self.input_iN.setVisible(needs_excit)
+        self.row_i0_label.setVisible(needs_init and (is_rl or is_rlc))
+        self.input_i0.setVisible(needs_init and (is_rl or is_rlc))
+        self.row_v0_label.setVisible(needs_init and is_rc)
+        self.input_v0.setVisible(needs_init and is_rc)
+        
+        self.row_di0_label.setVisible(needs_init and is_rlc)
+        self.input_di0.setVisible(needs_init and is_rlc)
+
+        self.row_Vth_label.setVisible(needs_excit and not is_rlc)
+        self.input_Vth.setVisible(needs_excit and not is_rlc)
+        self.row_iN_label.setVisible(needs_excit and not is_rlc)
+        self.input_iN.setVisible(needs_excit and not is_rlc)
         
         if self._last_topo != current_topo:
-            self.set_ideal_parameters(is_rl)
+            self.set_ideal_parameters(current_topo)
             self._last_topo = current_topo
-
+            
+    
     def extract_thevenin_voltage(self, R_th):
         if self.input_Vth.text().strip():
             return float(self.input_Vth.text())
@@ -188,7 +246,7 @@ class TransientSimulatorUI(QMainWindow):
         elif self.input_iN.text().strip():
             return float(self.input_iN.text())
         raise ValueError("Falta parámetro de excitación: Ingrese V_th o I_N.")
-
+    
     def run_simulation(self):
         try:
             R_th = float(self.input_Rth.text())
@@ -197,9 +255,9 @@ class TransientSimulatorUI(QMainWindow):
 
             t = np.linspace(0, tmax, 2500)
             curves = []
-            is_rl = self.combo_type.currentText() == "Circuito RL"
+            current_topo = self.combo_type.currentText()
 
-            if is_rl:
+            if current_topo == "Circuito RL":
                 L = float(self.input_L.text())
                 tau_val = CircuitSimulator.get_tau_rl(R_th, L)
                 
@@ -221,7 +279,7 @@ class TransientSimulatorUI(QMainWindow):
                 
                 ylabel = 'Corriente i(t) [A]'
 
-            else:
+            elif current_topo == "Circuito RC":
                 C = float(self.input_C.text())
                 tau_val = CircuitSimulator.get_tau_rc(R_th, C)
 
@@ -243,16 +301,37 @@ class TransientSimulatorUI(QMainWindow):
                 
                 ylabel = 'Voltaje $V_c(t)$ [V]'
 
+            elif current_topo == "Circuito RLC Serie":
+                L = float(self.input_L.text())
+                C = float(self.input_C.text())
+                
+                # Análisis de convergencia asintótica
+                alpha = R_th / (2 * L)
+                omega0 = 1 / np.sqrt(L * C)
+
+                if self.chk_forced.isChecked():
+                    if not np.isclose(alpha, omega0, rtol=1e-2):
+                        QMessageBox.warning(self, "Desviación Topológica", "Los parámetros ingresados no producen un sistema estrictamente críticamente amortiguado (R ≠ 2√(L/C)). La gráfica asume que α rige la envolvente.")
+                    
+                    i0 = float(self.input_i0.text())
+                    di0 = float(self.input_di0.text())
+                    i_t, tau_val = CircuitSimulator.rlc_series_critically_damped(t, R_th, L, C, i0, di0)
+                    curves.append({'t': t, 'y': i_t, 'label': r'$i(t) = \left[i(0) + \left(\frac{di(0)}{dt} + \alpha i(0)\right)t\right]e^{-\alpha t}$', 'color': '#900C3F'})
+                
+                ylabel = 'Corriente i(t) [A]'
+
             if not curves:
                 QMessageBox.warning(self, "Advertencia", "Seleccione al menos un comportamiento a graficar.")
                 return
 
-            self.label_tau.setText(f"Constante de tiempo (τ): {tau_val*1000:.4f} ms")
+            self.label_tau.setText(f"Constante Asintótica Equivalente (τ): {tau_val*1000:.4f} ms")
             self.canvas.plot_simulation(curves, tau_val, show_taus=self.chk_taus.isChecked(), ylabel=ylabel)
             
         except Exception as e:
             QMessageBox.critical(self, "Error de Simulación", str(e))
-
+    
+    
+    
     def export_plot(self):
         save_dir = os.path.join(os.getcwd(), "Imagenes")
         os.makedirs(save_dir, exist_ok=True)
